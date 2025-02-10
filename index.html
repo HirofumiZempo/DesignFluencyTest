@@ -224,6 +224,8 @@
     // 「パターン」は 5点のうち最大4本の線で構成される。  
     // ここでは「パターンを識別するキー」として、結んだ点同士のペアの集合を文字列化して使う。
     // 例: [(0,1),(1,2),(2,3),(3,4)] → "0-1_1-2_2-3_3-4" のように並べてソート
+    let isPointerDown = false;  // ← 追加：指やマウスが押下中かどうか
+    let lastPointIndex = null;  // ← 追加：最後に結んだ点のインデックス
 
     let testStarted = false;
     let linesDrawn = [];   // 現在のパターンの線（配列）
@@ -304,6 +306,31 @@
     // キャンバス上で押し始めた時（マウスダウン／タッチスタート）
     function handlePointerDown(e) {
       if (!testStarted) return;
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      let clientX, clientY;
+      if (e.touches) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      let pointIndex = getPointIndexAt(x, y); // 修正：ローカル変数 pointIndex に代入
+      if (pointIndex !== -1) {
+        isPointerDown = true;
+        lastPointIndex = pointIndex;
+      } else {
+        isPointerDown = false;
+        lastPointIndex = null;
+      }
+    }
+
+    function handlePointerMove(e) {
+      // まだテストが始まっていない or 押下していないなら何もしない
+      if (!testStarted || !isPointerDown) return;
 
       e.preventDefault();
       const rect = canvas.getBoundingClientRect();
@@ -318,90 +345,128 @@
 
       const x = clientX - rect.left;
       const y = clientY - rect.top;
-      startPointIndex = getPointIndexAt(x, y);
+      let currentPointIndex = getPointIndexAt(x, y);
+
+      // もし今の指の位置が「どこかの点の上」かつ「前の点とは異なる」なら
+      if (currentPointIndex !== -1 && currentPointIndex !== lastPointIndex) {
+        // まず重複チェック
+        let newPair = [lastPointIndex, currentPointIndex];
+        let sortedNewPair = newPair.slice().sort((a, b) => a - b);
+
+        let isDuplicateLine = linesDrawn.some(pair => {
+          let sortedPair = pair.slice().sort((a, b) => a - b);
+          return sortedPair[0] === sortedNewPair[0] && sortedPair[1] === sortedNewPair[1];
+        });
+
+        // 重複しないなら linesDrawn に追加
+        if (!isDuplicateLine && lastPointIndex !== null) {
+          linesDrawn.push(newPair);
+
+          // 4本になったらパターン確定
+          if (linesDrawn.length === 4) {
+            checkAndRegisterPattern(linesDrawn);
+            linesDrawn = [];
+          }
+          drawPoints(linesDrawn);
+        }
+
+        // 「前の点」を更新
+         lastPointIndex = currentPointIndex;
+      }
+      else {
+        // 一時線を描画したい場合
+        drawPoints(linesDrawn);
+        if (lastPointIndex !== null) {
+          ctx.strokeStyle = "#00f";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          const pStart = points[lastPointIndex];
+          ctx.moveTo(pStart.x, pStart.y);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        }
+      }
     }
 
     // キャンバス上で離した時（マウスアップ／タッチエンド）
     function handlePointerUp(e) {
-      if (!testStarted || startPointIndex === null) return;
-
+      if (!testStarted) return;
       e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      let clientX, clientY;
-      if (e.changedTouches) {
-        clientX = e.changedTouches[0].clientX;
-        clientY = e.changedTouches[0].clientY;
-      } else {
-        clientX = e.clientX;
-        clientY = e.clientY;
-      }
 
-      const x = clientX - rect.left;
-      const y = clientY - rect.top;
-      let endPointIndex = getPointIndexAt(x, y);
-
-      // 点から点へドラッグしていた場合のみ線を引く、かつ、同じ点同士の組み合わせ（重複線）がすでに存在する場合は追加しないようにチェック
-      if (endPointIndex !== -1 && endPointIndex !== startPointIndex) {
-      // 既に同じ点同士の組み合わせがあるかチェック（順序は問わない）
-      let newPair = [startPointIndex, endPointIndex];
-      let sortedNewPair = newPair.slice().sort((a, b) => a - b);
-      let isDuplicateLine = linesDrawn.some(pair => {
-        let sortedPair = pair.slice().sort((a, b) => a - b);
-        return sortedPair[0] === sortedNewPair[0] && sortedPair[1] === sortedNewPair[1];
-      });
-      if (isDuplicateLine) {
-        // 重複している場合は線を追加せずに処理終了
-        startPointIndex = null;
-        return;
-      }
-
-      linesDrawn.push(newPair);
-      // 4本まで線を引ける
-      if (linesDrawn.length === 4) {
-        // パターン完成
-        checkAndRegisterPattern(linesDrawn);
-        // 次のパターンを描くためにリセット
-        linesDrawn = [];
-      }
-      // 再描画
-      drawPoints(linesDrawn);
-    }
-
+      // 一筆書き終了
+      isPointerDown = false;
+      lastPointIndex = null;
 
       startPointIndex = null;
     }
 
     canvas.addEventListener("mousedown", handlePointerDown);
-    canvas.addEventListener("mousemove", (e)=>{ e.preventDefault(); }); // ドラッグ中のカーソル動き
+    canvas.addEventListener("mousemove", handlePointerMove);
     canvas.addEventListener("mouseup", handlePointerUp);
 
     // タッチイベント pointer系イベントで登録
     canvas.addEventListener("touchstart", handlePointerDown, { passive: false });
     canvas.addEventListener("touchend", handlePointerUp, { passive: false });
+
     // 例：タッチ移動中に一時的な線を描画する関数
     function handleTouchMove(e) {
-        if (!testStarted || startPointIndex === null) return;
-        e.preventDefault();
+      // 一筆書き用：押下してなければ何もしない
+      if (!testStarted || !isPointerDown) return;
+  
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      let clientX = e.touches[0].clientX;
+      let clientY = e.touches[0].clientY;
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+
+      // 現在どの点の上にいるかチェック
+      let currentPointIndex = getPointIndexAt(x, y);
+
+      // もし点の上にいて、前の点(lastPointIndex)と違う場合は線を確定
+      if (currentPointIndex !== -1 && currentPointIndex !== lastPointIndex) {
+        // 1) 同じ線が既に存在しないかチェック (重複チェック)
+        let newPair = [lastPointIndex, currentPointIndex];
+        let sortedNewPair = newPair.slice().sort((a, b) => a - b);
+        let isDuplicateLine = linesDrawn.some(pair => {
+          let sortedPair = pair.slice().sort((a, b) => a - b);
+          return sortedPair[0] === sortedNewPair[0] && sortedPair[1] === sortedNewPair[1];
+        });
     
-    const rect = canvas.getBoundingClientRect();
-    let clientX = e.touches[0].clientX;
-    let clientY = e.touches[0].clientY;
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+        // 2) 重複していなければ linesDrawn に追加
+        if (!isDuplicateLine && lastPointIndex !== null) {
+          linesDrawn.push(newPair);
+      
+          // 4本になったらパターン確定
+          if (linesDrawn.length === 4) {
+            checkAndRegisterPattern(linesDrawn);
+            // 次のパターンを描くためにリセット
+            linesDrawn = [];
+          }
+          // 再描画
+          drawPoints(linesDrawn);
+        }
     
-    // 一時的な線として、開始点から現在位置までの線を描画
-    // ※drawPoints() を修正して、現在の一時線（例えば tempLine ）も描画できるようにする必要があります。
-    // 以下は例示的なコードです。
-    drawPoints(linesDrawn); // 既存の確定線と点を描画
-    // 一時的な線を追加描画
-    ctx.strokeStyle = "#00f";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    const pStart = points[startPointIndex];
-    ctx.moveTo(pStart.x, pStart.y);
-    ctx.lineTo(x, y);
-    ctx.stroke();
+        // 一筆書きなので、新しい点を「次の出発点」にする
+        lastPointIndex = currentPointIndex;
+      }
+      else {
+        // 点と点の間を移動しているだけなら、必要に応じて一時線を描画するなり
+        // 今回のサンプルでは、暫定的に一時線を引くならこんな処理を追加(任意)
+        drawPoints(linesDrawn);
+        ctx.strokeStyle = "#00f";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // 直前の点から (x, y) へ一時ライン
+        if (lastPointIndex !== null) {
+          const pStart = points[lastPointIndex];
+          ctx.moveTo(pStart.x, pStart.y);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        }
+      }
     }
+
 
     // 既存の touchmove イベントリスナーの置き換え（パッシブオプションも付与）
     canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
