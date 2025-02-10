@@ -60,7 +60,7 @@
     
     #canvas-container {
       position: relative;      /* 子要素(ボタン)の絶対配置の基準にする */
-      width: 400px;            /* キャンバス幅に合わせる(必要に応じて調整) */
+      width: 365px;            /* キャンバス幅に合わせる(必要に応じて調整) */
       height: 400px;
       margin: 0 auto;          /* 画面中央寄せ(ページ全体の中央にしたい場合) */
     }
@@ -143,7 +143,7 @@
 
     <!-- キャンバス（指/マウスで線をなぞる領域） -->
   <div id="canvas-container">
-    <canvas id="testCanvas" width="400" height="400"></canvas>
+    <canvas id="testCanvas" width="365" height="400"></canvas>
     <button id="startButton" onclick="startTest()">Start</button>
     <button id="resetButton" style="display:none;">リセット</button>
   </div>
@@ -209,7 +209,7 @@
 
     // キャンバスサイズを400x400に変更
     const canvas = document.getElementById("testCanvas");
-    canvas.width = 400;
+    canvas.width = 365;
     canvas.height = 400;
     const ctx = canvas.getContext("2d");
 
