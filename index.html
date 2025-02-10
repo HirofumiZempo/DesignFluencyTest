@@ -133,8 +133,7 @@
   <!-- ■■■ Design Fluency Test画面 ■■■ -->
   <div id="design-fluency-test">
     <h2>Design Fluency Test</h2>
-    <p style="text-align: center;">5つの点を4本の線で繋ぎ、<strong>1分以内</strong>にできるだけ多くのパターンを作成してください。<br>
-       同じパターンはカウントされません。
+    <p style="text-align: center;">5つの点を4本の線で繋ぎ、<strong>1分以内</strong>にできるだけ多くのパターンを作成してください。
     </p>
     
     <!-- 成功パターン数を表示 -->
@@ -277,7 +276,7 @@
       testStarted = false;
 
       let resultText = "テスト終了！ユニークなパターン数: <br>" + uniquePatternsCount 
-           + "（全" + totalAttempts + "回）";
+           + "（全" + totalAttempts + "回）"<br> Retryする前に、画面下のパターンをチェック;
       document.getElementById('resultText').innerHTML = resultText;
 
       // モーダル表示
