@@ -65,21 +65,33 @@
       margin: 0 auto;          /* 画面中央寄せ(ページ全体の中央にしたい場合) */
     }
     
+    /* 点滅アニメーションの定義 */
+    @keyframes slowBlink {
+      0%   { opacity: 1; }
+      35%  { opacity: 1; }   /* 最初の20%は表示状態を維持 */
+      47%  { opacity: 0.2; }  
+      50%  { opacity: 0; }  
+      53%  { opacity: 0.2; }   /* 透明状態を維持 */
+      65%  { opacity: 1; }   /* フェードイン */
+      100% { opacity: 1; }
+    }
+    
     #startButton {
-      position: absolute;      
-      top: 50%;                
-      left: 50%;               
+      position: absolute; 
+      top: 50%; 
+      left: 50%; 
       transform: translate(-50%, -50%); /* 中央座標をボタンの中心に合わせる */
       font-size: 120px;         /* ボタン文字を大きく */
       padding: 0;      /* ボタンを大きく */
-      width: 300px;        /* 必要に応じてボタン全体の幅を指定 */
-      height: 180px;
-      line-height: 180px;      /* ボタンの高さと同じ値に設定 */
+      width: 350px;        /* 必要に応じてボタン全体の幅を指定 */
+      height: 350px;
+      line-height: 350px;      /* ボタンの高さと同じ値に設定 */
       text-align: center;      /* テキストを中央揃え */
       cursor: pointer;         /* ポインタ形状 */
       border-radius: 20px; /* ボタンの角を丸く */
       border: 5px solid blue;  /* ここで青い枠線を追加 */
       color: blue;            /* 文字色を青に設定 */
+      animation: slowBlink 4s infinite; /* 4秒間隔で点滅 */
     }
     
    /* モーダル全体 */
@@ -118,6 +130,21 @@
       text-align: center;
       padding: 0;              /* 余白をリセット */
     }
+
+    /* フリーズ状態を表すオーバーレイ */
+    #freezeOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 365px;       /* キャンバス幅と同じ */
+      height: 400px;      /* キャンバス高さと同じ */
+      background-color: rgba(255, 255, 255, 0.5); /* 半透明 */
+      z-index: 999;       /* 最前面に表示するために大きめの値 */
+      text-align: center;
+      font-size: 36px;
+      color: #333;
+      padding-top: 150px; /* 「フリーズ中」の文字を中央寄せしたいなら調整 */
+      }
 
   </style>
 </head>
@@ -191,6 +218,10 @@
     // リセットボタンはテスト前は非表示にする
     document.getElementById('resetButton').style.display = 'none';
     
+    document.addEventListener("DOMContentLoaded", function() {
+      document.getElementById('resultModal').style.display = 'none';
+    });
+    
     drawPoints(); // 初期描画（点の描画）
     loadRanking();
     }
@@ -226,7 +257,7 @@
     // 例: [(0,1),(1,2),(2,3),(3,4)] → "0-1_1-2_2-3_3-4" のように並べてソート
     let isPointerDown = false;  // ← 追加：指やマウスが押下中かどうか
     let lastPointIndex = null;  // ← 追加：最後に結んだ点のインデックス
-
+    let isFreeze = false;
     let testStarted = false;
     let linesDrawn = [];   // 現在のパターンの線（配列）
     let startPointIndex = null; // ドラッグ開始時の点
@@ -328,9 +359,29 @@
       }
     }
 
+     //フリーズオーバーレイを非表示
+     function hideFreezeOverlay() {
+       let overlay = document.getElementById('freezeOverlay');
+       if (overlay) {
+        overlay.remove();
+       }
+      }
+
+      //フリーズオーバーレイを表示
+      function showFreezeOverlay() {
+        const oldOverlay = document.getElementById('freezeOverlay');
+        if (oldOverlay) {
+           oldOverlay.remove();
+          }
+        let overlay = document.createElement('div');
+        overlay.id = 'freezeOverlay';
+        overlay.innerText = '完成!';
+        document.getElementById('canvas-container').appendChild(overlay);
+       }
+
     function handlePointerMove(e) {
       // まだテストが始まっていない or 押下していないなら何もしない
-      if (!testStarted || !isPointerDown) return;
+      if (!testStarted || !isPointerDown || isFreeze) return;
 
       e.preventDefault();
       const rect = canvas.getBoundingClientRect();
@@ -364,10 +415,27 @@
 
           // 4本になったらパターン確定
           if (linesDrawn.length === 4) {
+            // パターンを登録
             checkAndRegisterPattern(linesDrawn);
-            linesDrawn = [];
+            // フリーズ状態にする
+            isFreeze = true;
+            // フリーズ中にユーザーからの入力を無効にするため、キャンバスのポインターイベントを一時無効にする
+            canvas.style.pointerEvents = 'none';
+            // オーバーレイを表示して視覚的にフリーズを示す
+            showFreezeOverlay();
+
+            setTimeout(() => {
+              // フリーズ解除
+              isFreeze = false;
+              // 1秒後に線を消去して再描画
+              linesDrawn = [];
+              drawPoints();
+              canvas.style.pointerEvents = 'auto';
+              hideFreezeOverlay();
+            }, 700); 
+          } else {
+            drawPoints(linesDrawn);
           }
-          drawPoints(linesDrawn);
         }
 
         // 「前の点」を更新
@@ -438,15 +506,22 @@
           linesDrawn.push(newPair);
       
           // 4本になったらパターン確定
-          if (linesDrawn.length === 4) {
-            checkAndRegisterPattern(linesDrawn);
-            // 次のパターンを描くためにリセット
-            linesDrawn = [];
-          }
-          // 再描画
-          drawPoints(linesDrawn);
-        }
-    
+        if (linesDrawn.length === 4) {
+        checkAndRegisterPattern(linesDrawn);
+        isFreeze = true;
+        canvas.style.pointerEvents = 'none';
+        showFreezeOverlay();
+        setTimeout(() => {
+        isFreeze = false;
+        linesDrawn = [];
+        drawPoints();
+        canvas.style.pointerEvents = 'auto';
+        hideFreezeOverlay();
+        }, 700);
+       } else {
+       drawPoints(linesDrawn);
+       }
+     }
         // 一筆書きなので、新しい点を「次の出発点」にする
         lastPointIndex = currentPointIndex;
       }
@@ -593,6 +668,5 @@
   });
 
   </script>
-  <script src="script.js?v=20250210"></script>
 </body>
 </html>
